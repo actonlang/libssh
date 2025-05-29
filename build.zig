@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
 
     const config_header = b.addConfigHeader(
         .{
-            .style = .{ .cmake = .{ .path = "config.h.cmake" } },
+            .style = .{ .cmake = b.path("config.h.cmake") },
             .include_path = "config.h",
         },
         .{
@@ -216,10 +216,10 @@ pub fn build(b: *std.Build) void {
         .files = source_files.items,
         .flags = flags.items,
     });
-    lib.addIncludePath(.{ .path = "include" });
+    lib.addIncludePath(b.path("include"));
     lib.linkLibC();
 
-    lib.installHeadersDirectory("include/libssh", "libssh");
+    lib.installHeadersDirectory(b.path("include/libssh"), "libssh", .{});
 
     b.installArtifact(lib);
 }
