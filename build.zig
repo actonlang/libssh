@@ -5,13 +5,16 @@ const Path = std.Build.LazyPath;
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
-    const t = target.result;
+    const target_info = target.result;
     const with_server = b.option(bool, "WITH_SERVER", "Enable server-side APIs") orelse false;
 
-    var lib = b.addStaticLibrary(.{
+    var lib = b.addLibrary(.{
+        .linkage = .static,
         .name = "ssh",
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
 
     const config_header = b.addConfigHeader(
@@ -20,6 +23,13 @@ pub fn build(b: *std.Build) void {
             .include_path = "config.h",
         },
         .{
+            .PACKAGE = "libssh",
+            .PROJECT_NAME = "libssh",
+            .VERSION = "0.11.0",
+            .PROJECT_VERSION = "0.11.0",
+            .SYSCONFDIR = "/etc",
+            .BINARYDIR = "/usr/bin",
+            .SOURCEDIR = "/usr/src",
             .GLOBAL_BIND_CONFIG = "/etc/ssh/libssh_server_config",
             .GLOBAL_CLIENT_CONFIG = "/etc/ssh/ssh_config",
             .HAVE_ARGP_H = true,
@@ -67,15 +77,15 @@ pub fn build(b: *std.Build) void {
             .HAVE_POLL = true,
             .HAVE_SELECT = true,
             .HAVE_CLOCK_GETTIME = true,
-            .HAVE_NTOHLL = if (t.os.tag == .linux) false else true,
-            .HAVE_HTONLL = if (t.os.tag == .linux) false else true,
+            .HAVE_NTOHLL = if (target_info.os.tag == .linux) false else true,
+            .HAVE_HTONLL = if (target_info.os.tag == .linux) false else true,
             .HAVE_STRTOULL = true,
             .HAVE___STRTOULL = true,
             .HAVE__STRTOUI64 = true,
             .HAVE_GLOB = true,
             .HAVE_EXPLICIT_BZERO = false,
-            .HAVE_MEMSET_S = if (t.os.tag == .linux) false else true,
-            .HAVE_SECURE_ZERO_MEMORY = if (t.os.tag == .linux) false else true,
+            .HAVE_MEMSET_S = if (target_info.os.tag == .linux) false else true,
+            .HAVE_SECURE_ZERO_MEMORY = if (target_info.os.tag == .linux) false else true,
             .HAVE_CMOCKA_SET_TEST_FILTER = false,
 
             .HAVE_LIBCRYPTO = false,
@@ -121,11 +131,11 @@ pub fn build(b: *std.Build) void {
 
     const version_header = b.addConfigHeader(.{
         .style = .{ .cmake = b.path("include/libssh/libssh_version.h.cmake") },
-        .include_path = "libssh/libssh_version.h"
-        }, .{
-        .libssh_VERSION_MAJOR=0,
-        .libssh_VERSION_MINOR=11,
-        .libssh_VERSION_PATCH=0,
+        .include_path = "libssh/libssh_version.h",
+    }, .{
+        .libssh_VERSION_MAJOR = 0,
+        .libssh_VERSION_MINOR = 11,
+        .libssh_VERSION_PATCH = 0,
     });
 
     lib.addConfigHeader(config_header);
@@ -136,19 +146,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    var source_files = std.ArrayList([]const u8).init(b.allocator);
-    defer source_files.deinit();
-    var flags = std.ArrayList([]const u8).init(b.allocator);
-    defer flags.deinit();
-
-    flags.appendSlice(&.{
+    const flags = &.{
         "-Wall",
         "-Wextra",
         "-Wpedantic",
-        //"-Wno-long-long",
-    }) catch unreachable;
+    };
 
-    source_files.appendSlice(&.{
+    const base_sources = &.{
         "src/agent.c",
         "src/alloc.c",
         "src/auth.c",
@@ -197,59 +201,33 @@ pub fn build(b: *std.Build) void {
         "src/config_parser.c",
         "src/token.c",
         "src/pki_ed25519_common.c",
-    }) catch unreachable;
-
-    if (with_server) {
-        source_files.appendSlice(&.{
-            "src/server.c",
-            "src/bind.c",
-            "src/bind_config.c",
-        }) catch unreachable;
-    }
-
-    if (t.os.tag != .windows) {
-        source_files.appendSlice(&.{
-            "src/threads/noop.c",
-            "src/threads/pthread.c",
-        }) catch unreachable;
-    }
-
-    const mbedtls = true;
-    if (mbedtls) {
-        source_files.appendSlice(&.{
-            "src/threads/mbedtls.c",
-            "src/libmbedcrypto.c",
-            "src/mbedcrypto_missing.c",
-            "src/pki_mbedcrypto.c",
-            "src/ecdh_mbedcrypto.c",
-            "src/getrandom_mbedcrypto.c",
-            "src/md_mbedcrypto.c",
-            "src/dh_key.c",
-            "src/pki_ed25519.c",
-            "src/external/ed25519.c",
-            "src/external/fe25519.c",
-            "src/external/ge25519.c",
-            "src/external/sc25519.c",
-        }) catch unreachable;
-
-        source_files.appendSlice(&.{
-            "src/external/chacha.c",
-            "src/external/poly1305.c",
-            "src/chachapoly.c",
-        }) catch unreachable;
-
-        source_files.appendSlice(&.{
-            "src/external/curve25519_ref.c",
-        }) catch unreachable;
-
-        source_files.appendSlice(&.{
-            "src/dh-gex.c",
-        }) catch unreachable;
-    }
+        // mbedtls sources
+        "src/threads/mbedtls.c",
+        "src/libmbedcrypto.c",
+        "src/mbedcrypto_missing.c",
+        "src/pki_mbedcrypto.c",
+        "src/ecdh_mbedcrypto.c",
+        "src/getrandom_mbedcrypto.c",
+        "src/md_mbedcrypto.c",
+        "src/dh_key.c",
+        "src/pki_ed25519.c",
+        "src/external/ed25519.c",
+        "src/external/fe25519.c",
+        "src/external/ge25519.c",
+        "src/external/sc25519.c",
+        "src/external/chacha.c",
+        "src/external/poly1305.c",
+        "src/chachapoly.c",
+        "src/external/curve25519_ref.c",
+        "src/dh-gex.c",
+        // noop/pthread threads (non-windows)
+        "src/threads/noop.c",
+        "src/threads/pthread.c",
+    };
 
     lib.addCSourceFiles(.{
-        .files = source_files.items,
-        .flags = flags.items,
+        .files = base_sources,
+        .flags = flags,
     });
     lib.addIncludePath(b.path("include"));
     lib.linkLibrary(dep_libmbedtls.artifact("mbedcrypto"));
