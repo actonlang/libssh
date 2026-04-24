@@ -157,6 +157,7 @@ LIBSSH_4_5_0    # Released
         ssh_channel_poll;
         ssh_channel_poll_timeout;
         ssh_channel_read;
+        ssh_channel_read_buffered;
         ssh_channel_read_nonblocking;
         ssh_channel_read_timeout;
         ssh_channel_request_auth_agent;
@@ -223,6 +224,7 @@ LIBSSH_4_5_0    # Released
         ssh_get_log_userdata;
         ssh_get_openssh_version;
         ssh_get_poll_flags;
+        ssh_session_handle_poll;
         ssh_get_pubkey;
         ssh_get_pubkey_hash;
         ssh_get_publickey;
